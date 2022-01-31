@@ -1,3 +1,8 @@
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb/stb_image_resize.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+
 #include <stdio.h>
 #include <chrono>
 #include <thread>
@@ -65,28 +70,44 @@ Model::Model(const char *filepath)
     }
 
     // allocate buffer after all checks completed
-    m_input_buffer = (RGB<float> *)malloc(sizeof(RGB<float>) * m_num_pixels);
-    m_output_buffer = new float[m_output_size];
+    m_input_buffer = new RGB<float>[m_num_pixels]{0.0f,0.0f,0.0f};
+    m_resize_buffer = new RGBA<uint8_t>[m_num_pixels]{0,0,0,0};
+    m_output_buffer = new float[m_output_size]{0.0f};
+}
+
+Model::~Model() {
+    // Dispose of the model and interpreter objects.
+    TfLiteInterpreterDelete(m_interp);
+    TfLiteInterpreterOptionsDelete(m_options);
+    TfLiteModelDelete(m_model);
+    delete[] m_input_buffer;
+    delete[] m_resize_buffer;
+    delete[] m_output_buffer;
 }
 
 void Model::Print() {
     PrintTfLiteModelSummary(m_interp);
 }
 
-bool Model::CopyDataToInput(const uint8_t *data, const int width, const int height) {
-    // make sure image size matches
-    if ((width != m_width) || (height != m_height)) {
-        return false;
-    }
+bool Model::CopyDataToInput(const uint8_t *data, const int width, const int height, const int row_stride) {
+    // resize image here
+    stbir_resize_uint8(
+        data, width, height, row_stride,
+        (uint8_t*)m_resize_buffer, m_width, m_height, 0,
+        4);
 
+    for (int y = 0; y < m_height; y++) {
+        for (int x = 0; x < m_width; x++) {
+            const int i = x + y*m_width;
 
-    // copy the uint8_t image data to the buffer
-    const RGBA<uint8_t> *rgba_data = reinterpret_cast<const RGBA<uint8_t>*>(data);
-    for (size_t i = 0; i < m_num_pixels; i++) {
-        size_t j = m_num_pixels-i-1;
-        m_input_buffer[i].r = ((float)rgba_data[j].b) / 255.0f;
-        m_input_buffer[i].g = ((float)rgba_data[j].g) / 255.0f;
-        m_input_buffer[i].b = ((float)rgba_data[j].r) / 255.0f;
+            // model requires the image to be flipped
+            // channels are also the same order
+            const int j = x + (m_height-y-1)*m_width;
+
+            m_input_buffer[i].r = ((float)m_resize_buffer[j].r) / 255.0f;
+            m_input_buffer[i].g = ((float)m_resize_buffer[j].g) / 255.0f;
+            m_input_buffer[i].b = ((float)m_resize_buffer[j].b) / 255.0f;
+        }
     }
     return true;
 }
@@ -118,15 +139,6 @@ void Model::RunBenchmark(const int n) {
     }
     ms_avg_invoke /= (float)(n);
     printf("%.2fms per invoke (N=%d)\n", ms_avg_invoke, n);
-}
-
-Model::~Model() {
-    // Dispose of the model and interpreter objects.
-    TfLiteInterpreterDelete(m_interp);
-    TfLiteInterpreterOptionsDelete(m_options);
-    TfLiteModelDelete(m_model);
-    free(m_input_buffer);
-    free(m_output_buffer);
 }
 
 void PrintTfLiteModelSummary(TfLiteInterpreter *interpreter) {

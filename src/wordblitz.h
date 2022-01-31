@@ -51,6 +51,12 @@ struct Grid {
         modifiers = new CellModifier[size]{MOD_NONE};
     }
 
+    ~Grid() {
+        delete[] characters;
+        delete[] values;
+        delete[] modifiers;
+    }
+
     const Cell GetCell(int i) const {
         return {characters[i], values[i], modifiers[i]};
     }

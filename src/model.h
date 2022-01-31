@@ -3,17 +3,7 @@
 #include "tensorflow/lite/c/c_api.h"
 #include "tensorflow/lite/c/common.h"
 
-#include "wordblitz.h"
-
-template <typename T>
-struct RGBA {
-    T r, g, b, a;
-};
-
-template <typename T>
-struct RGB {
-    T r, g, b;
-};
+#include "buffer_graphics.h"
 
 class Model
 {
@@ -22,12 +12,13 @@ public:
         int x;
         int y;
     };
-private:
+protected:
     TfLiteModel *m_model;
     TfLiteInterpreterOptions *m_options;
     TfLiteInterpreter *m_interp;
 
     RGB<float> *m_input_buffer;
+    RGBA<uint8_t> *m_resize_buffer;
     float *m_output_buffer;
     int m_output_size;
 
@@ -39,9 +30,10 @@ public:
     Model(const char *filepath);
     ~Model();
     // need to do a mapping to uint8_t to float
-    bool CopyDataToInput(const uint8_t *data, const int width, const int height);
-    void Parse();
+    bool CopyDataToInput(const uint8_t *data, const int width, const int height, const int row_stride);
+    virtual void Parse();
     inline RGB<float> *GetInputBuffer() { return m_input_buffer; }
+    inline RGBA<uint8_t> *GetResizeBuffer() { return m_resize_buffer; }
     inline Vec2D GetInputSize() const { return {m_width, m_height}; }
     inline int GetOutputSize() const { return m_output_size; }
     void Print();

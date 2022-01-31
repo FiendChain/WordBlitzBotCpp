@@ -21,6 +21,9 @@ set(SRC_FILES
     src/model.cpp src/missing.c 
     # app
     src/App.cpp src/gui.cpp
+    src/wordblitz_models.cpp
+    src/unified_model.cpp
+    src/buffer_graphics.cpp
     # wordblitz 
     src/wordblitz.cpp
     src/wordtree.cpp

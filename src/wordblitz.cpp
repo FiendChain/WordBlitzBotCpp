@@ -138,7 +138,7 @@ int GetPathValue(const Grid &grid, std::vector<Cursor> &path) {
         }
     }
 
-    return (multiplier * total_value) + path.size();
+    return (multiplier * total_value) + static_cast<int>(path.size());
 }
 
 std::vector<TraceResult> GetTraceFromSearch(Grid &grid, std::vector<SearchResult> &searches) {
