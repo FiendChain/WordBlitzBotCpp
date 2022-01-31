@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <memory>
+#include <fstream>
+#include <sstream>
+#include <iostream>
 
 #include "model.h"
 #include "buffer_graphics.h"
@@ -23,6 +26,20 @@ App::App(ID3D11Device *dx11_device, ID3D11DeviceContext *dx11_context)
             model_values,
             m_params,
             m_mss);
+    }
+    {
+        std::ifstream fp;
+        fp.open("assets/dicts/en.txt", std::ios::binary);
+        if (!fp.is_open()) {
+            throw std::runtime_error("Failed to load dictionary");
+        }
+        std::stringstream ss;
+        ss << fp.rdbuf();
+        fp.close();
+
+        const auto &buf = ss.str();
+
+        wordtree::ReadWordTree(buf.c_str(), buf.length(), m_node_pool, 20);
     }
     {
         auto &p = *m_params;
@@ -198,4 +215,14 @@ void App::UpdateModelTexture() {
     }
 
     m_dx11_context->Unmap(m_resize_texture.texture, subresource);   
+}
+
+void App::UpdateTraces() {
+    auto &grid = m_params->grid;
+    try {
+        auto searches = wordblitz::SearchWordTree(m_node_pool, grid.characters, grid.sqrt_size);
+        m_traces = wordblitz::GetTraceFromSearch(grid, searches);
+    } catch (std::exception &ex) {
+        std::cerr << "Got an exception in trace update: " << ex.what() << std::endl;
+    }
 }

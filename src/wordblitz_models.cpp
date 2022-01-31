@@ -54,7 +54,7 @@ CharacterModel::CharacterModel(const char *filepath)
 void CharacterModel::Parse() {
     Model::Parse();
     int i = argmax(m_output_buffer, 26);
-    m_char = 'A' + i;
+    m_char = 'a' + i;
 }
 
 BonusesModel::BonusesModel(const char *filepath)

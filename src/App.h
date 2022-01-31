@@ -9,6 +9,8 @@
 
 #include "util/MSS.h"
 #include "unified_model.h"
+#include "wordblitz.h"
+#include "wordtree.h"
 
 class App
 {
@@ -36,16 +38,21 @@ public:
     int m_screen_width;
     int m_screen_height;
 
+    Position m_capture_position;
+private:
     ID3D11Device *m_dx11_device; 
     ID3D11DeviceContext *m_dx11_context;
-
-    Position m_capture_position;
+    wordtree::NodePool m_node_pool; 
+    std::vector<wordblitz::TraceResult> m_traces;
 public:
     App(ID3D11Device *dx11_device, ID3D11DeviceContext *dx11_context);
     void Update();
+    void UpdateTraces();
     void UpdateScreenshotTexture();
     void UpdateModelTexture();
     void SetScreenshotSize(const int width, const int height);
+
+    std::vector<wordblitz::TraceResult>& GetTraces() { return m_traces; }
 private:
     TextureWrapper CreateTexture(const int width, const int height);
 };

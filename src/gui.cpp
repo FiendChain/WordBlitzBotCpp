@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <fmt/core.h>
+#include <ctype.h>
 
 static void RenderControls(App &app);
 static void RenderConfig(App &app);
@@ -19,6 +20,8 @@ static void RenderModelImage(App &app);
 
 static void RenderGridCropper(App &app, GridCropper &cropper, const int width, const int height, const char *id);
 static void RenderGridData(App &app);
+static void RenderTraces(App &app);
+static void RenderQuickControls(App &app);
 
 void RenderApp(App &app) {
     app.Update();
@@ -27,6 +30,7 @@ void RenderApp(App &app) {
     RenderStatistics(app);
     RenderModelView(app);
     RenderGridData(app);
+    RenderTraces(app);
 }
 
 void RenderControls(App &app) {
@@ -44,9 +48,7 @@ void RenderControls(App &app) {
     ImGui::Text("max_screenshot_size = %d x %d", max_buffer_size.x, max_buffer_size.y);
 
     ImGui::Separator();
-    if (ImGui::Button("Calculate")) {
-        app.m_model->Update();
-    }
+    RenderQuickControls(app);
 
     ImGui::End();
     
@@ -199,9 +201,7 @@ void RenderGridData(App &app) {
     auto &g = app.m_params->grid;
 
     ImGui::Begin("Grid");
-    if (ImGui::Button("Calculate")) {
-        app.m_model->Update();
-    }
+    RenderQuickControls(app);
 
     ImGui::Separator();
 
@@ -240,7 +240,7 @@ void RenderGridData(App &app) {
 
                 ImGui::DragInt("##value", &cell.value, 1, 0, 20);
                 // ImGui::InputText("##character", &cell.c, 1);
-                ImGui::Text("%c", cell.c);
+                ImGui::Text("%c", toupper(cell.c));
 
                 const char *label = GetModifierLabel(cell.modifier);
                 if (ImGui::BeginCombo("##bonuses", label)) {
@@ -265,4 +265,44 @@ void RenderGridData(App &app) {
 
 
     ImGui::End();
+}
+
+void RenderTraces(App &app) {
+    ImGui::Begin("Traces");
+
+    RenderQuickControls(app);
+
+    auto &traces = app.GetTraces();
+
+    ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable;
+    if (ImGui::BeginTable("Traces", 2, flags)) {
+        ImGui::TableSetupColumn("Word",  ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("Score", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+
+        for (auto &t: traces) {
+            ImGui::TableNextRow();
+
+            ImGui::TableNextColumn();
+            ImGui::Text(t.word.c_str());
+            ImGui::TableNextColumn();
+            ImGui::Text("%d", t.value);
+            // TODO: add color for status indicator
+
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::End();
+}
+
+void RenderQuickControls(App &app) {
+    if (ImGui::Button("Read")) {
+        app.m_model->Update();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Calculate")) {
+        app.UpdateTraces();
+    }
 }
