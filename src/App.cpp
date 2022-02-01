@@ -16,8 +16,6 @@
 #include "util/AutoGui.h"
 #include "util/KeyListener.h"
 
-#include "stb/stb_image_resize.h"
-
 App::App(ID3D11Device *dx11_device, ID3D11DeviceContext *dx11_context)
 : m_dx11_device(dx11_device), 
   m_dx11_context(dx11_context)
@@ -32,7 +30,6 @@ App::App(ID3D11Device *dx11_device, ID3D11DeviceContext *dx11_context)
         this->TracerThread();
     });
 
-    m_inter_buffer = NULL;
     m_mss = std::make_shared<util::MSS>();
     m_params = std::make_shared<AppParams>(4);
     {
@@ -74,7 +71,6 @@ App::App(ID3D11Device *dx11_device, ID3D11DeviceContext *dx11_context)
             {107,107}
         };
         m_params->inter_buffer_size = {433,433};
-        ApplyInterbufferSize();
     }
 
     // setup screen shotter
@@ -110,10 +106,6 @@ App::App(ID3D11Device *dx11_device, ID3D11DeviceContext *dx11_context)
 }
 
 App::~App() {
-    if (m_inter_buffer != NULL) {
-        delete[] m_inter_buffer;
-    }
-
     // stop tracing and terminate tracer thread
     m_is_tracer_thread_alive = false;
     m_is_tracing = false;
@@ -143,7 +135,9 @@ void App::UpdateTraces() {
 
 void App::GrabScreen() {
     m_mss->Grab(m_capture_position.top, m_capture_position.left);
+}
 
+void App::ReadScreen() {
     auto bitmap = m_mss->GetBitmap();
     auto buffer_size = bitmap.GetSize();
     auto buffer_max_size = m_mss->GetMaxSize();
@@ -154,19 +148,10 @@ void App::GrabScreen() {
     const int row_stride = buffer_max_size.x*sizeof(uint8_t)*4;
     uint8_t *data = buffer + (buffer_max_size.y-buffer_size.y)*row_stride;
 
-    // resize the buffer to fit in intermediate buffer
-    stbir_resize_uint8(
-        data, buffer_size.x, buffer_size.y, row_stride,
-        (uint8_t*)(m_inter_buffer), m_inter_width, m_inter_height, 0, 
-        4);
-}
-
-void App::ReadScreen() {
-    const int row_stride = sizeof(uint8_t)*4*m_inter_width;
     try {
         m_model->Update(
-            (uint8_t*)(m_inter_buffer), 
-            m_inter_width, m_inter_height, row_stride);
+            data,
+            buffer_size.x, buffer_size.y, row_stride);
     } catch (std::exception &ex) {
         m_errors.push_back(fmt::format(
             "Error when reading: {}", 
@@ -184,20 +169,6 @@ void App::SetScreenshotSize(const int width, const int height) {
         width, height);
 }
 
-void App::ApplyInterbufferSize() {
-    if (m_inter_buffer != NULL) {
-        delete[] m_inter_buffer;
-    }
-    auto size = m_params->inter_buffer_size;
-    m_inter_buffer = new RGBA<uint8_t>[size.x*size.y];
-    m_inter_width = size.x;
-    m_inter_height = size.y;
-
-    m_inter_texture = std::make_unique<Texture>(
-        m_dx11_device, m_dx11_context,
-        m_inter_width, m_inter_height);
-}
-
 void App::UpdateScreenshotTexture() {
     auto bitmap = m_mss->GetBitmap();
     auto buffer_size = bitmap.GetSize();
@@ -206,36 +177,29 @@ void App::UpdateScreenshotTexture() {
     BITMAP &bmp = sec.dsBm;
     uint8_t *buffer = (uint8_t*)(bmp.bmBits);
 
-    auto texture_context = m_screenshot_texture->CreateEditContext();
-    const int row_stride = texture_context.GetRowStride();
+    const int src_row_stride = buffer_max_size.x*sizeof(uint8_t)*4;
+    uint8_t *src_data = buffer + (buffer_max_size.y-buffer_size.y)*src_row_stride;
+    RGBA<uint8_t> *src_buffer = (RGBA<uint8_t>*)(src_data);
 
+
+    auto texture_context = m_screenshot_texture->CreateEditContext();
+    const int dst_row_stride = texture_context.GetRowStride();
     auto dst_buffer = texture_context.GetBuffer();
-    RGBA<uint8_t> *src_buffer = (RGBA<uint8_t> *)(buffer);
 
     for (int x = 0; x < buffer_size.x; x++) {
         for (int y = 0; y < buffer_size.y; y++) {
-            int i = x + y*row_stride;
-            int j = x + (buffer_max_size.y-y-1)*buffer_max_size.x;
+            // screenshot is upside down
+            int i = x + (buffer_size.y-y-1)*dst_row_stride;
+            int j = x + y*buffer_max_size.x;
             dst_buffer[i] = src_buffer[j];
         }
     }
-}
 
-void App::UpdateInterTexture() {
-    auto texture_context = m_inter_texture->CreateEditContext();
-    auto dst_buffer = texture_context.GetBuffer();
-    auto buffer_size = texture_context.GetBufferSize();
-    const int row_stride = texture_context.GetRowStride();
+    // scale the grid to screenshot size
+    const float xscale = (float)buffer_size.x / (float)m_params->inter_buffer_size.x;
+    const float yscale = (float)buffer_size.y / (float)m_params->inter_buffer_size.y;
 
-    for (int x = 0; x < m_inter_width; x++) {
-        for (int y = 0; y < m_inter_height; y++) {
-            int i = x + y*row_stride;
-            int j = x + (m_inter_height-y-1)*m_inter_width;
-            dst_buffer[i] = m_inter_buffer[j];
-        }
-    }
-
-    auto RenderGrid = [](
+    auto RenderGrid = [xscale, yscale](
         RGBA<uint8_t> *buffer, const int width, const int height, const int row_stride,
         GridCropper &cropper, wordblitz::Grid &grid,
         const RGBA<uint8_t> &pen_color, const int pen_width=1)
@@ -249,8 +213,13 @@ void App::UpdateInterTexture() {
                 const int y_start = cropper.offset.y + y*cropper.spacing.y;
                 const auto size = cropper.size;
 
+                const int x_rescale = (int)(xscale * (float)x_start);
+                const int y_rescale = (int)(yscale * (float)y_start);
+                const int width_rescale = (int)(xscale * (float)size.x);
+                const int height_rescale = (int)(yscale * (float)size.y);
+
                 DrawRectInBuffer(
-                    x_start, y_start, x_start+size.x, y_start+size.y, 
+                    x_rescale, y_rescale, x_rescale+width_rescale, y_rescale+height_rescale,
                     pen_color, pen_width, 
                     buffer, width, height, row_stride);
             }
@@ -262,15 +231,15 @@ void App::UpdateInterTexture() {
     const RGBA<uint8_t> characters_color    = {0,255,0,255};
     const RGBA<uint8_t> values_color        = {0,0,255,255};
     RenderGrid(
-        dst_buffer, buffer_size.x, buffer_size.y, row_stride, 
+        dst_buffer, buffer_size.x, buffer_size.y, dst_row_stride, 
         m_params->cropper_bonuses, m_params->grid,
         bonus_color);
     RenderGrid(
-        dst_buffer, buffer_size.x, buffer_size.y, row_stride, 
+        dst_buffer, buffer_size.x, buffer_size.y, dst_row_stride, 
         m_params->cropper_values, m_params->grid,
         values_color);
     RenderGrid(
-        dst_buffer, buffer_size.x, buffer_size.y, row_stride, 
+        dst_buffer, buffer_size.x, buffer_size.y, dst_row_stride, 
         m_params->cropper_characters, m_params->grid,
         characters_color);
 }

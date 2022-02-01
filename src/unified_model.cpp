@@ -27,6 +27,7 @@ void check_and_throw(bool v, const char *message) {
 
 void IterateBufferUsingCropper(
     const uint8_t *buffer, const int width, const int height, const int row_stride,
+    const float xscale, const float yscale,
     wordblitz::Grid &grid, GridCropper &cropper, GridIteratorCallback callback)
 {
     const int sqrt_size = grid.sqrt_size;
@@ -39,18 +40,24 @@ void IterateBufferUsingCropper(
             const int y_start = cropper.offset.y + y*cropper.spacing.y;
             const auto size = cropper.size;
 
+            // rescale to fit cropper into actual image
+            const int x_rescale = (int)(xscale * (float)x_start);
+            const int y_rescale = (int)(yscale * (float)y_start);
+            const int width_rescale = (int)(xscale * (float)size.x);
+            const int height_rescale = (int)(yscale * (float)size.y);
+
             // we do this because the bmp buffer is starts from the bottom-left
             // however our ui widget renders it from top-left
             // thus we need to flip the y coordinate
-            const int y_flip = height-y_start-1-size.y;
+            const int y_flip = height-y_rescale-1-height_rescale;
 
-            check_and_throw(x_start >= 0, "Cropper grid goes past left");
-            check_and_throw(y_start >= 0, "Cropper grid goes past top");
-            check_and_throw((x_start + size.x) < width, "Cropper grid goes past right");
-            check_and_throw((y_start + size.y) < height, "Cropper grid goes past bottom");
+            check_and_throw(x_rescale >= 0, "Cropper grid goes past left");
+            check_and_throw(y_rescale >= 0, "Cropper grid goes past top");
+            check_and_throw((x_rescale + width_rescale) < width, "Cropper grid goes past right");
+            check_and_throw((y_rescale + height_rescale) < height, "Cropper grid goes past bottom");
 
-            const uint8_t *data = buffer + y_flip*row_stride + x_start*4;
-            callback(data, size.x, size.y, row_stride, cell);
+            const uint8_t *data = buffer + y_flip*row_stride + x_rescale*4;
+            callback(data, width_rescale, height_rescale, row_stride, cell);
         }
     }
 }
@@ -59,8 +66,12 @@ void UnifiedModel::Update(const uint8_t *buffer, const int width, const int heig
     const uint8_t *data = buffer;
     auto &p = *m_params;
 
+    const float xscale = (float)width / (float)p.inter_buffer_size.x;
+    const float yscale = (float)height / (float)p.inter_buffer_size.y;
+
     IterateBufferUsingCropper(
         buffer, width, height, row_stride,
+        xscale, yscale,
         p.grid, p.cropper_bonuses, 
         [this](
             const uint8_t *data, 
@@ -74,6 +85,7 @@ void UnifiedModel::Update(const uint8_t *buffer, const int width, const int heig
 
     IterateBufferUsingCropper(
         buffer, width, height, row_stride,
+        xscale, yscale,
         p.grid, p.cropper_characters, 
         [this](
             const uint8_t *data, 
@@ -87,6 +99,7 @@ void UnifiedModel::Update(const uint8_t *buffer, const int width, const int heig
 
     IterateBufferUsingCropper(
         buffer, width, height, row_stride,
+        xscale, yscale,
         p.grid, p.cropper_values, 
         [this](
             const uint8_t *data, 

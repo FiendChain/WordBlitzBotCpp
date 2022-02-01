@@ -51,11 +51,6 @@ private:
     int m_screen_width;
     int m_screen_height;
 
-    std::unique_ptr<Texture> m_inter_texture;
-    RGBA<uint8_t> *m_inter_buffer;
-    int m_inter_width;
-    int m_inter_height;
-
     std::unique_ptr<Texture> m_resize_texture;
 
     bool m_is_render_running;
@@ -86,10 +81,6 @@ public:
         return {m_screen_width, m_screen_height}; 
     }
     inline Position& GetCapturePosition() { return m_capture_position; }
-
-    inline Texture& GetInterTexture() { return *m_inter_texture; }
-    inline Vec2D GetInterSize() const { return {m_inter_width, m_inter_height}; }
-    void ApplyInterbufferSize();
 
     inline Texture& GetModelTexture() { return *m_resize_texture; }
 

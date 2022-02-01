@@ -75,7 +75,6 @@ static void RenderTraces(App &app);
 static void RenderErrorList(App &app);
 static void RenderStatistics(App &app);
 
-static void RenderInterImage(App &app);
 static void RenderScreenImage(App &app);
 static void RenderModelImage(App &app);
 static void RenderGridCropper(App &app, GridCropper &cropper, const int width, const int height, const char *id);
@@ -113,20 +112,13 @@ void RenderConfig(App &app) {
     }
 
     auto &p = app.GetParams();
-    static auto previous_size = p.inter_buffer_size;
-    bool is_changed = 
-        (previous_size.x != p.inter_buffer_size.x) || 
-        (previous_size.y != p.inter_buffer_size.y);
 
     // render the controls
     ImGui::Separator();
     ImGui::Text("Intermediate buffer");
     ImGui::DragInt("width", &p.inter_buffer_size.x, 1, 0, screen_size.width);
     ImGui::DragInt("height", &p.inter_buffer_size.y, 1, 0, screen_size.height);
-    if (is_changed && ImGui::Button("Apply changes")) {
-        app.ApplyInterbufferSize();
-        previous_size = p.inter_buffer_size;
-    }
+
     {
         auto size = app.GetScreenshotSize();
         ImGui::Text("Bonuses");
@@ -165,10 +157,6 @@ void RenderBuffers(App &app) {
 
     ImGui::Begin("Render");
     if (ImGui::BeginTabBar("Views")) {
-        if (ImGui::BeginTabItem("Inter view")) {
-            RenderInterImage(app);
-            ImGui::EndTabItem();
-        }
         if (ImGui::BeginTabItem("Screen view")) {
             RenderScreenImage(app);
             ImGui::EndTabItem();
@@ -191,35 +179,6 @@ void RenderScreenImage(App &app) {
     if (app.GetIsRendering()) app.UpdateScreenshotTexture();
 
     auto &texture = app.GetScreenshotTexture();
-    ImGui::Image(
-        (void*)texture.GetView(), 
-        ImVec2(texture.GetWidth()*zoom_scale, texture.GetHeight()*zoom_scale));
-
-    if (ImGui::IsItemHovered()) {
-        auto size = app.GetScreenshotSize();
-        if (scroller.UpdateOnItem(
-            size.x, size.y, 
-            0, screen_size.width, 0, screen_size.height))
-        {
-            app.SetScreenshotSize(size.x, size.y);
-        }
-    } 
-
-    auto& pos = app.GetCapturePosition();
-    scroller.UpdateAlways(
-        pos.top, pos.left,
-        0, screen_size.width, 0, screen_size.height);
-}
-
-void RenderInterImage(App &app) {
-    static float zoom_scale = 1.0f;
-    const auto screen_size = util::GetScreenSize();
-    static auto scroller = ImageZoomGizmo();
-
-    ImGui::DragFloat("Scale", &zoom_scale, 0.001f, 0.1f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    if (app.GetIsRendering()) app.UpdateInterTexture();
-
-    auto &texture = app.GetInterTexture();
     ImGui::Image(
         (void*)texture.GetView(), 
         ImVec2(texture.GetWidth()*zoom_scale, texture.GetHeight()*zoom_scale));

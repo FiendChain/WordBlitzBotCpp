@@ -41,8 +41,8 @@ void App::TracerThread() {
 
                 // trace our path
                 for (auto &cursor: trace.path) {
-                    const float xscale = (float)m_screen_width/(float)m_inter_width;
-                    const float yscale = (float)m_screen_height/(float)m_inter_height;
+                    const float xscale = (float)m_screen_width/(float)m_params->inter_buffer_size.x;
+                    const float yscale = (float)m_screen_height/(float)m_params->inter_buffer_size.y;
 
                     auto screen_pos = MapCursorToScreen(
                         cursor.x, cursor.y, 
