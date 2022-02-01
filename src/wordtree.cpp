@@ -46,8 +46,6 @@ void ReadWordTree(const char *buffer, const int buffer_size, NodePool &pool, con
             continue;
         }
 
-        node.is_leaf = false;
-
         if (pool_index >= node_count) {
             throw std::runtime_error("Node index exceed node count");
         }

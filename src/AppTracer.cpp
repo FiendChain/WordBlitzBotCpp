@@ -5,7 +5,8 @@
 #define NOMINMAX
 #include <windows.h>
 
-
+// TODO: make this dpi scaling aware
+// doesn't work when our scaling factor is different (the screen coordinates change)
 wordblitz::Cursor MapCursorToScreen(
     const int cx, const int cy, 
     const int top, const int left,
