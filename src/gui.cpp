@@ -179,9 +179,10 @@ void RenderScreenImage(App &app) {
     if (app.GetIsRendering()) app.UpdateScreenshotTexture();
 
     auto &texture = app.GetScreenshotTexture();
+    auto &inter_size = app.GetParams().inter_buffer_size;
     ImGui::Image(
         (void*)texture.GetView(), 
-        ImVec2(texture.GetWidth()*zoom_scale, texture.GetHeight()*zoom_scale));
+        ImVec2(inter_size.x*zoom_scale, inter_size.y*zoom_scale));
 
     if (ImGui::IsItemHovered()) {
         auto size = app.GetScreenshotSize();
@@ -317,16 +318,21 @@ struct TraceCount {
 };
 
 void RenderTraces(App &app) {
-    auto lock = std::shared_lock(app.GetTraceMutex());
-    auto &traces = app.GetTraces();
     static TraceCount counts;
+    static int total_count = 0;
 
     auto label = fmt::format(
         "Traces ({}/{})###traces_window", 
-        counts.complete, traces.size());
+        counts.complete, total_count);
     ImGui::Begin(label.c_str());
 
     RenderQuickControls(app);
+
+    // NOTE: we need to acquire lock here, since the controls may call Read
+    // Read will try to acquire a unique lock onto the traces mutex, which can cause a deadlock
+    auto lock = std::shared_lock(app.GetTraceMutex());
+    auto &traces = app.GetTraces();
+    total_count = traces.size();
 
     ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable;
     ImGui::BeginChild("##traces_list");
@@ -360,7 +366,6 @@ void RenderTraces(App &app) {
             ImGui::Text(t.word.c_str());
             ImGui::TableNextColumn();
             ImGui::Text("%d", t.value);
-            // TODO: add color for status indicator
         }
 
         counts = new_counts;
