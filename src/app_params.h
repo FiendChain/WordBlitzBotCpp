@@ -19,6 +19,7 @@ struct AppParams {
     GridCropper cropper_bonuses;
     GridCropper cropper_values;
     GridCropper cropper_characters;
+    Vec2D inter_buffer_size;
     wordblitz::Grid grid;
 
     AppParams(const int _sqrt_grid_size)

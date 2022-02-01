@@ -10,77 +10,132 @@
 #include <fmt/core.h>
 #include <ctype.h>
 
-static void RenderControls(App &app);
+class ImageZoomGizmo 
+{
+private:
+    bool m_is_drag_enabled;
+    ImVec2 m_prev_mouse_pos;
+public:
+    ImageZoomGizmo() {
+        m_is_drag_enabled = false;
+        m_prev_mouse_pos = ImGui::GetMousePos();
+    }
+
+    bool UpdateOnItem(
+        int& width, int& height,
+        const int min_x, const int max_x, const int min_y, const int max_y)
+    {
+        bool is_changed = false;
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 10.0f)) {
+            m_is_drag_enabled = true;
+        }
+
+        ImGuiIO& io = ImGui::GetIO();
+        int mouse_wheel = static_cast<int>(io.MouseWheel);
+        if (mouse_wheel != 0) {
+            int delta = mouse_wheel*mouse_wheel*mouse_wheel;
+            width = std::clamp(width+delta, min_x, max_x);
+            height = std::clamp(height+delta, min_y, max_y);
+            is_changed = true;
+        } 
+
+        return is_changed;
+    }
+
+    bool UpdateAlways(
+        int& top, int& left, 
+        const int min_x, const int max_x, const int min_y, const int max_y) 
+    {
+        bool is_changed = false;
+        if (m_is_drag_enabled) {
+            if (!ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                m_is_drag_enabled = false;
+            } else {
+                auto new_pos = ImGui::GetMousePos();
+                ImVec2 delta;
+                delta.x = new_pos.x - m_prev_mouse_pos.x;
+                delta.y = new_pos.y - m_prev_mouse_pos.y;
+                left = std::clamp(left - (int)(delta.x), min_x, max_x);
+                top = std::clamp(top - (int)(delta.y), min_y, max_y);
+                is_changed = true;
+            }
+        }
+
+        m_prev_mouse_pos = ImGui::GetMousePos();
+        return is_changed;
+    }
+};
+
+// our gui components
+static void RenderQuickControls(App &app);
 static void RenderConfig(App &app);
-static void RenderStatistics(App &app);
-
-static void RenderModelView(App &app);
-static void RenderScreenImage(App &app);
-static void RenderModelImage(App &app);
-
-static void RenderGridCropper(App &app, GridCropper &cropper, const int width, const int height, const char *id);
+static void RenderBuffers(App &app);
 static void RenderGridData(App &app);
 static void RenderTraces(App &app);
-static void RenderQuickControls(App &app);
+static void RenderErrorList(App &app);
+static void RenderStatistics(App &app);
 
+static void RenderInterImage(App &app);
+static void RenderScreenImage(App &app);
+static void RenderModelImage(App &app);
+static void RenderGridCropper(App &app, GridCropper &cropper, const int width, const int height, const char *id);
+
+
+// all gui components
 void RenderApp(App &app) {
     app.Update();
-    RenderControls(app);
     RenderConfig(app);
     RenderStatistics(app);
-    RenderModelView(app);
+    RenderBuffers(app);
     RenderGridData(app);
     RenderTraces(app);
-}
-
-void RenderControls(App &app) {
-    const auto screen_size = util::GetScreenSize();
-
-    ImGui::Begin("Controls");
-
-    ImGui::Checkbox("Is render (F2)", &app.m_is_render_running);
-
-    auto &ss_texture = app.m_screenshot_texture; 
-    ImGui::Text("pointer = %p", ss_texture.view);
-    ImGui::Text("texture             = %d x %d", ss_texture.width, ss_texture.height);
-
-    auto max_buffer_size = app.m_mss->GetMaxSize();
-    ImGui::Text("max_screenshot_size = %d x %d", max_buffer_size.x, max_buffer_size.y);
-
-    ImGui::Separator();
-    RenderQuickControls(app);
-
-    ImGui::End();
-    
+    RenderErrorList(app);
 }
 
 void RenderConfig(App &app) {
     const auto screen_size = util::GetScreenSize();
-    static int screen_width = app.m_screen_width;
-    static int screen_height = app.m_screen_height;
 
     ImGui::Begin("Config");
-    ImGui::DragInt("Top", &app.m_capture_position.top, 1, 0, screen_size.height);
-    ImGui::DragInt("Left", &app.m_capture_position.left, 1, 0, screen_size.width);
-    ImGui::DragInt("screen width", &screen_width, 1, 0, screen_size.width);
-    ImGui::DragInt("screen height", &screen_height, 1, 0, screen_size.height);
-    if ((screen_width != app.m_screen_width) || 
-        (screen_height != app.m_screen_height)) 
     {
-        if (ImGui::Button("Submit changes")) {
-            app.SetScreenshotSize(screen_width, screen_height);
+        auto &pos = app.GetCapturePosition();
+        ImGui::DragInt("Top", &pos.top, 1, 0, screen_size.height);
+        ImGui::DragInt("Left", &pos.left, 1, 0, screen_size.width);
+    }
+
+    {
+        auto size = app.GetScreenshotSize();
+        bool is_changed = false;
+        is_changed = ImGui::DragInt("screen width", &size.x, 1, 0, screen_size.width) || is_changed;
+        is_changed = ImGui::DragInt("screen height", &size.y, 1, 0, screen_size.height) || is_changed;
+        if (is_changed) {
+            app.SetScreenshotSize(size.x, size.y);
         }
     }
 
+    auto &p = app.GetParams();
+    static auto previous_size = p.inter_buffer_size;
+    bool is_changed = 
+        (previous_size.x != p.inter_buffer_size.x) || 
+        (previous_size.y != p.inter_buffer_size.y);
+
     // render the controls
     ImGui::Separator();
-    auto &p = *(app.m_params);
-    ImGui::Text("Bonuses");
-    RenderGridCropper(app, p.cropper_bonuses, app.m_screen_width, app.m_screen_height, "##bonus_cropper");
-    ImGui::Text("Characters");
-    RenderGridCropper(app, p.cropper_characters, app.m_screen_width, app.m_screen_height, "##characters_cropper");
-    ImGui::Text("Values");
-    RenderGridCropper(app, p.cropper_values, app.m_screen_width, app.m_screen_height, "##values_cropper");
+    ImGui::Text("Intermediate buffer");
+    ImGui::DragInt("width", &p.inter_buffer_size.x, 1, 0, screen_size.width);
+    ImGui::DragInt("height", &p.inter_buffer_size.y, 1, 0, screen_size.height);
+    if (is_changed && ImGui::Button("Apply changes")) {
+        app.ApplyInterbufferSize();
+        previous_size = p.inter_buffer_size;
+    }
+    {
+        auto size = app.GetScreenshotSize();
+        ImGui::Text("Bonuses");
+        RenderGridCropper(app, p.cropper_bonuses, size.x, size.y, "##bonus_cropper");
+        ImGui::Text("Characters");
+        RenderGridCropper(app, p.cropper_characters, size.x, size.y, "##characters_cropper");
+        ImGui::Text("Values");
+        RenderGridCropper(app, p.cropper_values, size.x, size.y, "##values_cropper");
+    }
 
     ImGui::End(); 
 }
@@ -88,16 +143,32 @@ void RenderConfig(App &app) {
 void RenderStatistics(App &app) {
     ImGui::Begin("Statistics");
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+    ImGui::Separator();
+    {
+        auto &texture = app.GetScreenshotTexture(); 
+        ImGui::Text("pointer = %p", texture.GetView());
+        ImGui::Text("texture = %d x %d", texture.GetWidth(), texture.GetHeight());
+    }
+    {
+        auto size = app.GetMSS().GetMaxSize();
+        ImGui::Text("max_screenshot_size = %d x %d", size.x, size.y);
+    }
+    ImGui::Separator();
+    ImGui::Text("node pool size = %d", app.GetNodePoolSize());
+    ImGui::Text("node pool capacity = %d", app.GetNodePoolCapacity());
+
     ImGui::End();
 }
 
-
-
-void RenderModelView(App &app) {
+void RenderBuffers(App &app) {
     const auto screen_size = util::GetScreenSize();
 
     ImGui::Begin("Render");
     if (ImGui::BeginTabBar("Views")) {
+        if (ImGui::BeginTabItem("Inter view")) {
+            RenderInterImage(app);
+            ImGui::EndTabItem();
+        }
         if (ImGui::BeginTabItem("Screen view")) {
             RenderScreenImage(app);
             ImGui::EndTabItem();
@@ -113,76 +184,89 @@ void RenderModelView(App &app) {
 
 void RenderScreenImage(App &app) {
     static float zoom_scale = 1.0f;
-    static auto last_mouse_pos = ImGui::GetMousePos();
-    static auto is_drag_enabled = false;
     const auto screen_size = util::GetScreenSize();
+    static auto scroller = ImageZoomGizmo();
 
     ImGui::DragFloat("Scale", &zoom_scale, 0.001f, 0.1f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    if (app.m_is_render_running) app.UpdateScreenshotTexture();
+    if (app.GetIsRendering()) app.UpdateScreenshotTexture();
 
-    auto &texture = app.m_screenshot_texture;
+    auto &texture = app.GetScreenshotTexture();
     ImGui::Image(
-        (void*)texture.view, 
-        ImVec2(texture.width*zoom_scale, texture.height*zoom_scale));
+        (void*)texture.GetView(), 
+        ImVec2(texture.GetWidth()*zoom_scale, texture.GetHeight()*zoom_scale));
 
-    // create dragging controls for the image
     if (ImGui::IsItemHovered()) {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 10.0f)) {
-            is_drag_enabled = true;
+        auto size = app.GetScreenshotSize();
+        if (scroller.UpdateOnItem(
+            size.x, size.y, 
+            0, screen_size.width, 0, screen_size.height))
+        {
+            app.SetScreenshotSize(size.x, size.y);
         }
     } 
-    
-    if (is_drag_enabled) {
-        if (!ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-            is_drag_enabled = false;
-        } else {
-            auto latest_pos = ImGui::GetMousePos();
-            ImVec2 delta;
-            delta.x = latest_pos.x - last_mouse_pos.x;
-            delta.y = latest_pos.y - last_mouse_pos.y;
-            auto &p = app.m_capture_position;
-            p.top   = std::clamp(p.top  - (int)(delta.y), 0, screen_size.height);
-            p.left  = std::clamp(p.left - (int)(delta.x), 0, screen_size.width);
+
+    auto& pos = app.GetCapturePosition();
+    scroller.UpdateAlways(
+        pos.top, pos.left,
+        0, screen_size.width, 0, screen_size.height);
+}
+
+void RenderInterImage(App &app) {
+    static float zoom_scale = 1.0f;
+    const auto screen_size = util::GetScreenSize();
+    static auto scroller = ImageZoomGizmo();
+
+    ImGui::DragFloat("Scale", &zoom_scale, 0.001f, 0.1f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    if (app.GetIsRendering()) app.UpdateInterTexture();
+
+    auto &texture = app.GetInterTexture();
+    ImGui::Image(
+        (void*)texture.GetView(), 
+        ImVec2(texture.GetWidth()*zoom_scale, texture.GetHeight()*zoom_scale));
+
+    if (ImGui::IsItemHovered()) {
+        auto size = app.GetScreenshotSize();
+        if (scroller.UpdateOnItem(
+            size.x, size.y, 
+            0, screen_size.width, 0, screen_size.height))
+        {
+            app.SetScreenshotSize(size.x, size.y);
         }
-    }
-    last_mouse_pos = ImGui::GetMousePos();
+    } 
+
+    auto& pos = app.GetCapturePosition();
+    scroller.UpdateAlways(
+        pos.top, pos.left,
+        0, screen_size.width, 0, screen_size.height);
 }
 
 void RenderModelImage(App &app) {
     static float zoom_scale = 10.0f;
-    static auto last_mouse_pos = ImGui::GetMousePos();
-    static auto is_drag_enabled = false;
     const auto screen_size = util::GetScreenSize();
+    static auto scroller = ImageZoomGizmo();
 
     ImGui::DragFloat("Scale", &zoom_scale, 0.001f, 0.1f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    if (app.m_is_render_running) app.UpdateModelTexture();
+    if (app.GetIsRendering()) app.UpdateModelTexture();
 
-    auto &texture = app.m_resize_texture;
+    auto &texture = app.GetModelTexture();
     ImGui::Image(
-        (void*)texture.view, 
-        ImVec2(texture.width*zoom_scale, texture.height*zoom_scale));
+        (void*)texture.GetView(), 
+        ImVec2(texture.GetWidth()*zoom_scale, texture.GetHeight()*zoom_scale));
 
-    // create dragging controls for the image
     if (ImGui::IsItemHovered()) {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 10.0f)) {
-            is_drag_enabled = true;
+        auto size = app.GetScreenshotSize();
+        if (scroller.UpdateOnItem(
+            size.x, size.y, 
+            0, screen_size.width, 0, screen_size.height))
+        {
+            app.SetScreenshotSize(size.x, size.y);
         }
     } 
-    
-    if (is_drag_enabled) {
-        if (!ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-            is_drag_enabled = false;
-        } else {
-            auto latest_pos = ImGui::GetMousePos();
-            ImVec2 delta;
-            delta.x = latest_pos.x - last_mouse_pos.x;
-            delta.y = latest_pos.y - last_mouse_pos.y;
-            auto &p = app.m_capture_position;
-            p.top   = std::clamp(p.top  - (int)(delta.y), 0, screen_size.height);
-            p.left  = std::clamp(p.left - (int)(delta.x), 0, screen_size.width);
-        }
-    }
-    last_mouse_pos = ImGui::GetMousePos();
+
+    auto& pos = app.GetCapturePosition();
+    scroller.UpdateAlways(
+        pos.top, pos.left,
+        0, screen_size.width, 0, screen_size.height);
 }
 
 void RenderGridCropper(App &app, GridCropper &cropper, const int width, const int height, const char *label) {
@@ -198,7 +282,7 @@ void RenderGridCropper(App &app, GridCropper &cropper, const int width, const in
 }
 
 void RenderGridData(App &app) {
-    auto &g = app.m_params->grid;
+    auto &g = app.GetParams().grid;
 
     ImGui::Begin("Grid");
     RenderQuickControls(app);
@@ -267,42 +351,133 @@ void RenderGridData(App &app) {
     ImGui::End();
 }
 
+struct TraceCount {
+    int incomplete = 0;
+    int complete = 0;
+    int in_progress = 0;
+};
+
 void RenderTraces(App &app) {
-    ImGui::Begin("Traces");
+    auto lock = std::shared_lock(app.GetTraceMutex());
+    auto &traces = app.GetTraces();
+    static TraceCount counts;
+
+    auto label = fmt::format(
+        "Traces ({}/{})###traces_window", 
+        counts.complete, traces.size());
+    ImGui::Begin(label.c_str());
 
     RenderQuickControls(app);
 
-    auto &traces = app.GetTraces();
-
     ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable;
+    ImGui::BeginChild("##traces_list");
     if (ImGui::BeginTable("Traces", 2, flags)) {
-        ImGui::TableSetupColumn("Word",  ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("Word",  ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Score", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
 
+        TraceCount new_counts;
 
         for (auto &t: traces) {
+            ImU32 row_color;
+            switch (t.status) {
+            case wordblitz::TraceStatus::COMPLETE: 
+                new_counts.complete++;
+                row_color = ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.0f, 0.35f));
+                break;
+            case wordblitz::TraceStatus::IN_PROGRESS: 
+                new_counts.in_progress++;
+                row_color = ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 1.0f, 0.35f));
+                break;
+            case wordblitz::TraceStatus::INCOMPLETE: 
+                new_counts.incomplete++;
+                row_color = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 0.0f, 0.35f));
+                break;
+            }
             ImGui::TableNextRow();
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, row_color);
 
             ImGui::TableNextColumn();
             ImGui::Text(t.word.c_str());
             ImGui::TableNextColumn();
             ImGui::Text("%d", t.value);
             // TODO: add color for status indicator
-
         }
+
+        counts = new_counts;
         ImGui::EndTable();
     }
+    ImGui::EndChild();
 
     ImGui::End();
 }
 
 void RenderQuickControls(App &app) {
+    ImGui::BeginGroup();
+    {
+        bool v = app.GetIsRendering();
+        if (ImGui::Checkbox("Is render (F2)", &v)) {
+            app.SetIsRendering(v);
+        }
+    }
+    {
+        bool v = app.GetIsGrabbing();
+        if (ImGui::Checkbox("Is grab (F3)", &v)) {
+            app.SetIsGrabbing(v);
+        }
+    }
+    {
+        bool v = app.GetIsTracing();
+        if (ImGui::Checkbox("Is tracing (F4)", &v)) {
+            app.SetIsTracing(v);
+        }
+    }
+    {
+        int ms_tracer = app.GetTracerSpeedMillis();
+        ImGuiSliderFlags flags = ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_ClampOnInput;
+        if (ImGui::DragInt("Trace speed (ms)", &ms_tracer, 1, 10, 1000, "%d", flags)) {
+            app.SetTracerSpeedMillis(ms_tracer);
+        }
+    }
+
     if (ImGui::Button("Read")) {
-        app.m_model->Update();
+        app.ReadScreen();
     }
     ImGui::SameLine();
     if (ImGui::Button("Calculate")) {
         app.UpdateTraces();
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Trace")) {
+        app.SetIsTracing(true);
+    }
+    ImGui::EndGroup();
+}
+
+void RenderErrorList(App &app) {
+    auto &errors = app.GetErrorList();
+    auto it = errors.begin();
+
+    ImGui::Begin("Errors");
+    if (errors.size() == 0) {
+        ImGui::Text("No errors");
+    }
+
+    int id = 0;
+    while (it != errors.end()) {
+        ImGui::PushID(id++);
+        ImGui::BeginGroup();
+        bool is_delete = ImGui::Button("X");
+        ImGui::SameLine();
+        ImGui::TextWrapped((*it).c_str());
+        ImGui::EndGroup();
+
+        if (is_delete) {
+            it = errors.erase(it);
+        } else {
+            it++;
+        }
+        ImGui::PopID();
+    }
+    ImGui::End();
 }

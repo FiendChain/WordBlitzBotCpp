@@ -20,7 +20,9 @@ set(SRC_FILES
     # neural network
     src/model.cpp src/missing.c 
     # app
-    src/App.cpp src/gui.cpp
+    src/App.cpp src/AppTracer.cpp
+    src/gui.cpp
+    src/Texture.cpp
     src/wordblitz_models.cpp
     src/unified_model.cpp
     src/buffer_graphics.cpp
@@ -39,6 +41,7 @@ target_link_libraries(main PRIVATE
     fmt::fmt
     spdlog::spdlog spdlog::spdlog_header_only
     "d3d11.lib" "dxgi.lib" "d3dcompiler.lib") 
+target_compile_options(main PRIVATE "/MP")
 
 # vcpkg.cmake has internal stuff that autogenerates this
 # we have to do this manually
