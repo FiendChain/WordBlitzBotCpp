@@ -24,9 +24,13 @@ struct Node {
 void ReadWordTree(const char *buffer, const int buffer_size, NodePool &pool, const int max_stack_size);
 bool TraverseWordTree(NodePool &pool, const char *word, const int length);
 bool InsertWordTree(NodePool &pool, const char *word, const int length);
+bool RemoveWordTree(NodePool &pool, const char *word, const int length);
 
 bool TraverseWordTree(NodePool &pool, const std::basic_string<char> &s);
 bool InsertWordTree(NodePool &pool, const std::basic_string<char> &s);
+bool RemoveWordTree(NodePool &pool, const std::basic_string<char> &s);
+
+std::vector<uint8_t> WriteWordTree(NodePool &pool);
 
 
 }
