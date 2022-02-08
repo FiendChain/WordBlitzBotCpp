@@ -83,7 +83,8 @@ int run_app() {
     io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI: Experimental.
 
     // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
+    // ImGui::StyleColorsDark();
+    ImGui::StyleColorsLight();
     //ImGui::StyleColorsClassic();
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
@@ -114,13 +115,6 @@ int run_app() {
     //IM_ASSERT(font != NULL);
 
     // Our state
-    #ifdef NDEBUG
-    // TODO: enable dock space without demo window
-    bool show_demo_window = true;
-    #else
-    bool show_demo_window = true;
-    #endif
-
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // create app after setting up the dx11 context
@@ -147,12 +141,9 @@ int run_app() {
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window) {
-            ImGui::ShowDemoWindow();
-        }
 
         // render our app
+        ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
         RenderApp(main_app);
 
         // Rendering
