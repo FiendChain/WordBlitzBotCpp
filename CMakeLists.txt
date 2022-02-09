@@ -18,7 +18,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(SRC_FILES
     src/main.cpp 
     # neural network
-    src/model.cpp src/missing.c 
+    src/model.cpp
     # app
     src/App.cpp src/AppTracer.cpp
     src/gui.cpp
@@ -45,7 +45,14 @@ target_compile_options(main PRIVATE "/MP")
 
 # vcpkg.cmake has internal stuff that autogenerates this
 # we have to do this manually
-add_custom_command(TARGET main 
-    POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy 
-    ${tflitec_DIR}/bin/tensorflowlite_c.dll
-    $<TARGET_FILE_DIR:main>)
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    add_custom_command(TARGET main 
+        POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy 
+        ${tflitec_DIR}/bin/x64/Release/tensorflowlite_c.dll
+        $<TARGET_FILE_DIR:main>)
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    add_custom_command(TARGET main 
+        POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy 
+        ${tflitec_DIR}/bin/x86/Release/tensorflowlite_c.dll
+        $<TARGET_FILE_DIR:main>)
+endif()
